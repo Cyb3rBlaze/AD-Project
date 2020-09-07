@@ -2,3 +2,4 @@ tensorflow
 tqdm
 pydicom
 matplotlib
+opencv-python

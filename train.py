@@ -4,9 +4,14 @@ from train_utils import normalize, get_train_data, get_loss_object, get_optimize
 import tensorflow as tf
 from tqdm import tqdm
 
+EXAMPLES = 16
+SLICES = 128
+BATCH_SIZE = 1
+EPOCHS = 200
+
 def main():
     print("Creating model...")
-    model = create_model([188, 128, 128], [64, 128, 128], [3, 3, 3], [1, 2, 2], ["same", "same", "same"], [2, 2, 2])
+    model = create_model([SLICES, 128, 128], [128, 256, 512, 512], [3, 3, 3, 3], [1, 1, 1, 1], ["same", "same", "same", "same"], [2, 2, 2, 2])
     model.summary()
 
     print("Creating training objects...")
@@ -16,17 +21,16 @@ def main():
     model.compile(optimizer=adam_optimizer, loss=binary_cross_entropy)
 
     print("Gathering data...")
-    train_x_control, train_x_ad = get_train_data("./data/Alzheimer's/AV45(Amyloid)", "./data/Control/AV45(Amyloid)")
-
-    #model.fit([train_x[0][0][0].reshape((1, 360, 128, 128)), train_x[0][0][1].reshape((1, 360, 128, 128))], train_y[0].reshape((1, 1)), batch_size=4, epochs=2)
+    train_x_control, train_x_ad = get_train_data("./data/Alzheimer's/AV45(Amyloid)", "./data/Control/AV45(Amyloid)", SLICES, EXAMPLES)
     
-    train_x, train_y = create_trainable_data(train_x_control, train_x_ad)
-
+    train_x, train_y = create_trainable_data(train_x_control, train_x_ad, SLICES, EXAMPLES)
     print("Training...")
 
-    model.fit([train_x[0].reshape((32, 188, 128, 128))[1:32], train_x[1].reshape((32, 188, 128, 128))[1:32]], train_y.reshape((32, 1))[1:32], batch_size=4, epochs=8)
-    
-    print(train_y.reshape((32, 1))[8])
-    print(model.predict([train_x[0].reshape((32, 188, 128, 128))[5].reshape((1, 188, 128, 128)), train_x[1].reshape((32, 188, 128, 128))[5].reshape((1, 188, 128, 128))]))
+    model.fit([train_x[0].reshape((EXAMPLES, SLICES, 128, 128))[2:EXAMPLES], train_x[1].reshape((EXAMPLES, SLICES, 128, 128))[2:EXAMPLES]], train_y.reshape((EXAMPLES, 1))[2:EXAMPLES], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.2)
+    #model.fit([train_x[0].reshape((EXAMPLES, SLICES, 128, 128))[2:32], train_x[1].reshape((EXAMPLES, SLICES, 128, 128))[2:32]], train_y.reshape((EXAMPLES, 1))[2:32], batch_size=BATCH_SIZE, epochs=EPOCHS)
+
+    for i in range(EXAMPLES):
+        print(train_y.reshape((EXAMPLES, 1))[i])
+        print(model.predict([train_x[0].reshape((EXAMPLES, SLICES, 128, 128))[i].reshape((1, SLICES, 128, 128)), train_x[1].reshape((EXAMPLES, SLICES, 128, 128))[i].reshape((1, SLICES, 128, 128))]))
 
 main()
