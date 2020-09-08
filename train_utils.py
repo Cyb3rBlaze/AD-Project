@@ -73,13 +73,13 @@ def get_train_data(AD, CN, slices, num_of_examples):
                             single_slice = None
                             break
                     if single_slice != None:
-                        single_slice = single_slice[(int(len(single_slice)/2)-int(slices/2)):(int(len(single_slice)/2)+int(slices/2))]
-                        if np.array(single_slice).shape == (slices, 128, 128):
+                        single_slice = np.array(single_slice).reshape((128, 128, int(np.array(single_slice).size/128/128)))[:, :, (int(len(single_slice)/2)-int(slices/2)):(int(len(single_slice)/2)+int(slices/2))]
+                        if np.array(single_slice).shape == (128, 128, slices):
                             ad_images += [[single_slice]]
         if len(ad_images) >= num_of_examples:
             break
     
-    ad_images = np.array(ad_images).reshape((len(ad_images), slices, 128, 128))
+    ad_images = np.array(ad_images).reshape((len(ad_images), 128, 128, slices))
     ad_images = ad_images[:num_of_examples]
     
     print("Phase 2...")
@@ -97,13 +97,13 @@ def get_train_data(AD, CN, slices, num_of_examples):
                             single_slice = None
                             break
                     if single_slice != None:
-                        single_slice = single_slice[(int(len(single_slice)/2)-int(slices/2)):(int(len(single_slice)/2)+int(slices/2))]
-                        if np.array(single_slice).shape == (slices, 128, 128):
+                        single_slice = np.array(single_slice).reshape((128, 128, int(np.array(single_slice).size/128/128)))[:, :, (int(len(single_slice)/2)-int(slices/2)):(int(len(single_slice)/2)+int(slices/2))]
+                        if np.array(single_slice).shape == (128, 128, slices):
                             cn_images += [[single_slice]]
         if len(cn_images) >= num_of_examples:
             break
 
-    cn_images = np.array(cn_images).reshape((len(cn_images), slices, 128, 128))
+    cn_images = np.array(cn_images).reshape((len(cn_images), 128, 128, slices))
     cn_images = cn_images[:num_of_examples]
 
     print("Phase 3...")
@@ -129,9 +129,9 @@ def get_train_data(AD, CN, slices, num_of_examples):
 def create_trainable_data(train_x_control, train_x_ad, slices, num_of_examples):
     print("Shuffling...")
     
-    control_input = train_x_control[0].reshape((1, slices, 128, 128))
+    control_input = train_x_control[0].reshape((1, 128, 128, slices))
     for i in range(int(num_of_examples/2)-1):
-        control_input = np.concatenate((control_input, train_x_control[0].reshape((1, slices, 128, 128))))
+        control_input = np.concatenate((control_input, train_x_control[0].reshape((1, 128, 128, slices))))
     train_x = np.array([np.concatenate((train_x_ad[:int(num_of_examples/2)], control_input)), 
         np.concatenate((train_x_control[:int(num_of_examples/2)], control_input))])
     train_y = np.concatenate((np.ones((1, int(num_of_examples/2))), np.zeros((1, int(num_of_examples/2))))).reshape((1, num_of_examples))
