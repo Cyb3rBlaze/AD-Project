@@ -1,36 +1,55 @@
-from model import create_model
-from train_utils import normalize, get_train_data, get_loss_object, get_optimizer, create_trainable_data
+from model import create_classifier
+from train_utils import normalize, get_train_data, loss, get_optimizer, create_trainable_data, create_classifier_data, compute_gradients
+from tfrecords_utils import generate_classifier_tfrecords, open_tfrecords
 
 import tensorflow as tf
 from tqdm import tqdm
+import numpy as np
 
-EXAMPLES = 12
-SLICES = 160
-BATCH_SIZE = 4
+EXAMPLES = 150
+SLICES = 100
+BATCH_SIZE = 8
 EPOCHS = 200
 
 def main():
     print("Creating model...")
-    model = create_model([128, 128, SLICES], [64, 128, 256, 512], [3, 3, 3, 3], [1, 1, 1, 1], ["same", "same", "same", "same"], [2, 2, 2, 2])
+    model = create_classifier([128, 128, SLICES], [128, 128, 256], [3, 3, 3], [1, 1, 1], ["same", "same", "same"], [2, 2, 2])
     model.summary()
 
     print("Creating training objects...")
-    binary_cross_entropy = get_loss_object()
-    adam_optimizer = get_optimizer()
-
-    model.compile(optimizer=adam_optimizer, loss=binary_cross_entropy)
+    optimizer = get_optimizer()
 
     print("Gathering data...")
-    train_x_control, train_x_ad = get_train_data("./data/Alzheimer's/AV45(Amyloid)", "./data/Control/AV45(Amyloid)", SLICES, EXAMPLES)
+    #train_x_control, train_x_ad = get_train_data("./data/Alzheimer's/AV45(Amyloid)", "./data/Control/AV45(Amyloid)", SLICES, EXAMPLES)
     
-    train_x, train_y = create_trainable_data(train_x_control, train_x_ad, SLICES, EXAMPLES)
+    print("Generating tfrecords...")
+    #generate_classifier_tfrecords(['./data/tfrecords/data1.tfrecord', './data/tfrecords/data2.tfrecord', './data/tfrecords/data3.tfrecord'], train_x_control, train_x_ad, EXAMPLES)
+
+    print("Pulling tfrecords...")
+    dataset = open_tfrecords(["./data/tfrecords/data1.tfrecord", "./data/tfrecords/data2.tfrecord", "./data/tfrecords/data3.tfrecord"], EXAMPLES, SLICES)
+
     print("Training...")
 
-    model.fit([train_x[0].reshape((EXAMPLES, 128, 128, SLICES))[2:EXAMPLES], train_x[1].reshape((EXAMPLES, 128, 128, SLICES))[2:EXAMPLES]], train_y.reshape((EXAMPLES, 1))[2:EXAMPLES], batch_size=BATCH_SIZE, epochs=EPOCHS, validation_split=0.2)
-    #model.fit([train_x[0].reshape((EXAMPLES, SLICES, 128, 128))[2:32], train_x[1].reshape((EXAMPLES, SLICES, 128, 128))[2:32]], train_y.reshape((EXAMPLES, 1))[2:32], batch_size=BATCH_SIZE, epochs=EPOCHS)
+    for epoch in range(EPOCHS):
+        epoch_loss = None
+        curr_batch_x = None
+        curr_batch_y = None
+        batch_sample = 0
+        for sample in tqdm(dataset):
+            if batch_sample == 0:
+                curr_batch_x = sample[1].numpy().reshape((1, 128, 128, SLICES))
+                curr_batch_y = sample[0].numpy().reshape((1, 1))
+                batch_sample += 1
+            elif batch_sample % BATCH_SIZE == 0:
+                loss_value, grads = compute_gradients(model, curr_batch_x, curr_batch_y)
+                optimizer.apply_gradients(zip(grads, model.trainable_variables))
+                epoch_loss = loss_value
+                batch_sample = 0
+            else:
+                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, 128, 128, SLICES))))
+                curr_batch_y = np.concatenate((curr_batch_y, sample[0].numpy().reshape((1, 1))))
+                batch_sample += 1
 
-    for i in range(EXAMPLES):
-        print(train_y.reshape((EXAMPLES, 1))[i])
-        print(model.predict([train_x[0].reshape((EXAMPLES, SLICES, 128, 128))[i].reshape((1, SLICES, 128, 128)), train_x[1].reshape((EXAMPLES, SLICES, 128, 128))[i].reshape((1, SLICES, 128, 128))]))
+        print(epoch_loss)
 
 main()
