@@ -63,14 +63,24 @@ def autoencoder_loss(model, x, y, training):
     return get_autoencoder_loss_object()(y_true=y, y_pred=y_)
 
 
-def simple_classifier_loss(model, x, y, training):
+def simple_comparison_loss(model, x, y, training, autoencoder_scale, classifier_scale):
     y_ = model(x, training=training)
-    return get_simple_classifier_loss_object()(y_true=y, y_pred=y_)
+    loss_ad_av45 = get_autoencoder_loss_object()(y_true=x[0], y_pred=y_[0])
+    loss_ad_fdg = get_autoencoder_loss_object()(y_true=x[1], y_pred=y_[1])
+    loss_unknown_av45 = get_autoencoder_loss_object()(y_true=x[2], y_pred=y_[2])
+    loss_unknown_fdg = get_autoencoder_loss_object()(y_true=x[3], y_pred=y_[3])
+    loss_cn_av45 = get_autoencoder_loss_object()(y_true=x[4], y_pred=y_[4])
+    loss_cn_fdg = get_autoencoder_loss_object()(y_true=x[5], y_pred=y_[5])
+    loss_classifier = get_simple_comparison_loss_object()(y_true=y, y_pred=y_[6])
+    
+    return loss_ad_av45*autoencoder_scale + loss_ad_fdg*autoencoder_scale + loss_unknown_av45*autoencoder_scale + loss_unknown_fdg*autoencoder_scale + loss_cn_av45*autoencoder_scale + loss_cn_fdg*autoencoder_scale + loss_classifier*classifier_scale
 
 
-def simple_comparison_loss(model, x, y, training):
+def simple_classifier_loss(model, x, y, training, autoencoder_scaling, classifier_scaling):
     y_ = model(x, training=training)
-    return get_simple_comparison_loss_object()(y_true=y, y_pred=y_)
+    loss_autoencoder = get_autoencoder_loss_object()(y_true=y[0], y_pred=y_[0])
+    loss_classifier = get_simple_classifier_loss_object()(y_true=y[1], y_pred=y_[1])
+    return loss_autoencoder*autoencoder_scaling + loss_classifier*classifier_scaling
 
 
 def compute_autoencoder_gradients(model, inputs, targets):
@@ -79,16 +89,15 @@ def compute_autoencoder_gradients(model, inputs, targets):
     return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 
-def compute_simple_classifier_gradients(model, inputs, targets):
+def compute_simple_classifier_gradients(model, inputs, target_classifier, autoencoder_scaling, classifier_scaling):
     with tf.GradientTape() as tape:
-        loss_value = simple_classifier_loss(model, inputs, targets, training=True)
+        loss_value = simple_classifier_loss(model, inputs, [inputs, target_classifier], True, autoencoder_scaling, classifier_scaling)
     return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 
-def compute_simple_comparison_gradients(model, inputs, targets):
+def compute_simple_comparison_gradients(model, inputs, targets, autoencoder_scaling, classifier_scaling):
     with tf.GradientTape() as tape:
-        loss_value = simple_comparison_loss(model, inputs, targets, training=True)
-        loss_value += sum(model.losses)
+        loss_value = simple_comparison_loss(model, inputs, targets, True, autoencoder_scaling, classifier_scaling)
     return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 

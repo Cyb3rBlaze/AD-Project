@@ -62,22 +62,20 @@ def one_image_example(image_np, label):
 def generate_tfrecords(filenames, data_x, labels):
     print("Combining Data...")
     
-    #train_x = np.concatenate((av45, av1451, fdg))
     train_x = data_x
-    #train_y = np.concatenate((label_av45, label_av1451, label_fdg))
     train_y = labels
 
-    '''combined = list(zip(train_x, train_y))
+    combined = list(zip(train_x, train_y))
 
     random.seed(0)
     random.shuffle(combined)
     
-    train_x, train_y = zip(*combined)'''
+    train_x, train_y = zip(*combined)
 
     train_x = np.array(train_x)
     train_y = np.array(train_y)
 
-    print(train_y.shape)
+    print(train_y[:5])
 
     print("Writing...")
 
@@ -120,7 +118,7 @@ def get_autoencoder_data(AV45, slices, num_of_examples, starting_index):
                         if curr_index >= starting_index and type_change == False:
                             single_image = np.array([])
                             count = 0
-                            for k in listdir(AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j):
+                            '''for k in listdir(AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j):
                                 new_path = AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k)[97:99] + ".dcm"
                                 os.rename(AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k), new_path)
 
@@ -131,7 +129,7 @@ def get_autoencoder_data(AV45, slices, num_of_examples, starting_index):
                                         new_path = AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k)[0:1] + ".dcm"
                                 except:
                                     pass
-                                os.rename(AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + k, new_path)
+                                os.rename(AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + k, new_path)'''
                             
                             parse_dir_initial_strings = listdir(AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j)
                             parse_dir_initial_ints = []
@@ -143,12 +141,11 @@ def get_autoencoder_data(AV45, slices, num_of_examples, starting_index):
                             
                             #individual dcm files (k:test.dcm)
                             for k in sorted(parse_dir_initial_ints):
-                                print(k)
                                 try:
                                     data = pydicom.dcmread(AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k) + ".dcm")
-                                    single_slice = make_small(data.pixel_array, 128, 128).reshape((128, 128, 1))
+                                    single_slice = make_small(data.pixel_array, 128, 128).reshape((1, 128, 128, 1))
                                     if single_image.shape[0] >= 1:
-                                        single_image = np.concatenate((single_image, single_slice), axis=2)
+                                        single_image = np.concatenate((single_image, single_slice), axis=0)
                                     else:
                                         single_image = single_slice
                                 except:
@@ -168,7 +165,7 @@ def get_autoencoder_data(AV45, slices, num_of_examples, starting_index):
             if break_loop:
                 break
     
-    av45_images = np.array(av45_images).reshape((len(av45_images), 128, 128, slices))/1.0
+    av45_images = np.array(av45_images).reshape((len(av45_images), slices, 128, 128))/1.0
     av45_images = av45_images[:num_of_examples*3]
 
     print(av45_images.shape)
@@ -220,9 +217,9 @@ def get_classifier_data(AV45, slices, num_of_examples, starting_index):
                                 for k in sorted(parse_dir_initial_ints):
                                     try:
                                         data = pydicom.dcmread(AV45 + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k) + ".dcm")
-                                        single_slice = make_small(data.pixel_array, 128, 128).reshape((128, 128, 1))
+                                        single_slice = make_small(data.pixel_array, 128, 128).reshape((1, 128, 128, 1))
                                         if single_image.shape[0] >= 1:
-                                            single_image = np.concatenate((single_image, single_slice), axis=2)
+                                            single_image = np.concatenate((single_image, single_slice), axis=0)
                                         else:
                                             single_image = single_slice
                                     except:
@@ -242,13 +239,122 @@ def get_classifier_data(AV45, slices, num_of_examples, starting_index):
                 if break_loop:
                     break
     
-    av45_images = np.array(av45_images).reshape((len(av45_images), 128, 128, slices))/1.0
+    av45_images = np.array(av45_images).reshape((len(av45_images), slices, 128, 128))/1.0
     av45_images = av45_images[:num_of_examples*3]
 
     print(av45_images.shape)
     print(label_av45.shape)
     
     return av45_images, label_av45
+
+
+def get_av45_fdg_classifier_data(files, slices, num_of_examples, starting_index):
+    image_sets = listdir(files)
+
+    images = np.array([])
+
+    #CN:0
+    labels = np.zeros(num_of_examples)
+    #AD:1
+    labels = np.concatenate((labels, np.ones(num_of_examples)))
+
+    print("Phase 1...")
+
+    for i in listdir(files):
+        curr_index = 0
+        print(i)
+        #collections of collections of images (m:002_S_0413)
+        for m in tqdm(listdir(files + "/" + i)):
+            type_change = False
+            break_loop = False
+            pair = None
+            pair_count = 0
+            #collections of images parent folder (p:ADNI_Brain_PET__Raw_AV45)
+            for p in listdir(files + "/" + i + "/" + m):
+                #collections of images (h:2011-06-20_16_16_17.0)
+                for h in listdir(files + "/" + i + "/" + m + "/" + p):
+                    #whole image samples (j:I214559)
+                    for j in listdir(files + "/" + i + "/" + m + "/" + p + "/" + h):
+                        if curr_index >= starting_index and type_change == False:
+                            single_image = np.array([])
+                            count = 0
+                            '''for k in listdir(files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j):
+                                if str(k)[len(k)-19:len(k)-18] == "_":
+                                    new_path = files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k)[len(k)-21:len(k)-19] + ".dcm"
+                                    os.rename(files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k), new_path)
+                                elif str(k)[len(k)-21:len(k)-20] == "_":
+                                    new_path = files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k)[len(k)-23:len(k)-21] + ".dcm"
+                                    os.rename(files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k), new_path)
+                                else:
+                                    new_path = files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k)[len(k)-22:len(k)-20] + ".dcm"
+                                    os.rename(files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k), new_path)
+                            
+                            for k in listdir(files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j):
+                                new_path = files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k)[0:2] + ".dcm"
+                                try:
+                                    if k[0:1] == "_":
+                                        new_path = files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k)[1:2] + ".dcm"
+                                except:
+                                    pass
+                                os.rename(files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + k, new_path)'''
+                            
+                            parse_dir_initial_strings = listdir(files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j)
+                            parse_dir_initial_ints = []
+                            for e in parse_dir_initial_strings:
+                                e = e[0:2]
+                                if e[1:2] == ".":
+                                    e = e[0:1]
+                                parse_dir_initial_ints += [int(e)]
+                            
+                            #individual dcm files (k:test.dcm)
+                            for k in sorted(parse_dir_initial_ints):
+                                try:
+                                    data = pydicom.dcmread(files + "/" + i + "/" + m + "/" + p + "/" + h + "/" + j + "/" + str(k) + ".dcm")
+                                    single_slice = make_small(data.pixel_array, 128, 128).reshape((1, 128, 128, 1))
+                                    if single_image.shape[0] >= 1:
+                                        single_image = np.concatenate((single_image, single_slice), axis=0)
+                                    else:
+                                        single_image = single_slice
+                                except:
+                                    break
+
+                            if pair_count == 0:
+                                pair = single_image.reshape((1, slices, 128, 128, 1))
+                                pair_count += 1
+                            elif p[0:4] != "AV45":
+                                #(AV45, FDG)
+                                pair = np.concatenate((pair, single_image.reshape((1, slices, 128, 128, 1))))
+                                if images.shape[0] != 0:
+                                    images = np.concatenate((images, pair.reshape((1, 2, slices, 128, 128, 1))))
+                                else:
+                                    images = pair.reshape((1, 2, slices, 128, 128, 1))
+                                pair_count = 0
+                            else:
+                                #(AV45, FDG)
+                                pair = np.concatenate((single_image.reshape((1, slices, 128, 128, 1)), pair))
+                                if images.shape[0] != 0:
+                                    images = np.concatenate((images, pair.reshape((1, 2, slices, 128, 128, 1))))
+                                else:
+                                    images = pair.reshape((1, 2, slices, 128, 128, 1))
+                                pair_count = 0
+
+                    if np.array(images).shape[0] % num_of_examples == 0 and np.array(images).shape[0] > 0 and curr_index >= starting_index+1:
+                        type_change = True
+                        break_loop = True
+                        break
+                if break_loop:
+                    break
+            curr_index += 1
+            if break_loop:
+                break
+    
+    images = np.array(images).reshape((len(images), 2, slices, 128, 128, 1))/1.0
+    images = images[:num_of_examples*2]
+
+    print(images.shape)
+    print(labels.shape)
+    
+    return images, labels
 
 
 def _parse_image_function(example_proto):
@@ -277,10 +383,14 @@ def open_tfrecords(filenames):
 
 #First example is corrupted
 
-#av45, label_av45 = get_autoencoder_data("./data/AV45/Train", 96, 20, 0)
+#av45, label_av45 = get_autoencoder_data("./data/AV45/Test", 96, 20, 0)
 
-#generate_autoencoder_tfrecords(['./data/tfrecords/Autoencoder_Data_Train/data1.tfrecord'], av45, label_av45)
+#generate_tfrecords(['./data/tfrecords/Autoencoder_Data_Test/data1.tfrecord'], av45, label_av45)
 
-#av45, label_av45 = get_classifier_data("./data/AV45/Train", 96, 3, 1)
+#av45, label_av45 = get_classifier_data("./data/AV45/Train", 96, 1, 101)
 
 #generate_tfrecords(['./data/tfrecords/Reference/data1.tfrecord'], av45, label_av45)
+
+#images, labels = get_av45_fdg_classifier_data("./data/AV45_FDG_Test", 96, 12, 0)
+
+#generate_tfrecords(['./data/tfrecords/Comparison_Data_Test/data1.tfrecord'], images, labels)

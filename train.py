@@ -1,4 +1,4 @@
-from model import create_autoencoder, create_simple_classifier, create_simple_comparison_model
+from model import create_autoencoder, create_simple_classifier, create_simple_comparison_model, create_av45_fdg_comparison_model
 from train_utils import get_optimizer, compute_autoencoder_gradients, compute_simple_classifier_gradients, compute_simple_comparison_gradients, get_one_image
 from tfrecords import open_tfrecords
 
@@ -15,7 +15,7 @@ import nibabel as nib
 EXAMPLES = 525
 STARTING_INDEX = 0
 SLICES = 96
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 EPOCHS = 100
 
 
@@ -27,31 +27,34 @@ def save_image(data, filePath):
 
 
 def plot3d(data, filePath):
-    img = nib.Nifti1Image(data, np.eye(4))
+    final_arr = np.array([])
+    count = 0
+    for i in data:
+        if count == 0:
+            final_arr = i.reshape((128, 128, 1))
+        else:
+            final_arr = np.concatenate((final_arr, i.reshape(128, 128, 1)), axis=2)
+        count += 1
+
+    print(final_arr.shape)
+
+    img = nib.Nifti1Image(final_arr, np.eye(4))
     nib.save(img, filePath)
 
 
 def train_autoencoder():
     print("Creating model...")
-    model = create_autoencoder([128, 128, SLICES], [64, 64, 64], [3, 3, 3], [1, 1, 1], ["same", "same", "same"], [2, 2, 2])
+    model = create_simple_classifier([SLICES, 128, 128, 1], [16, 32], [3, 3], [1, 1], ["same", "same"], [2, 2])
     model.summary()
 
     print("Creating training objects...")
     optimizer = get_optimizer()
 
     print("Pulling tfrecords...")
-    dataset = open_tfrecords(["./data/tfrecords/Classifier_Data_Train/data1.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Train/data2.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Train/data3.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Train/data4.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Train/data5.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Train/data6.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Train/data7.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Train/data8.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Train/data9.tfrecord"])
+    dataset = open_tfrecords(["./data/tfrecords/Classifier_Data_Train/data1.tfrecord", 
+    "./data/tfrecords/Classifier_Data_Train/data2.tfrecord"])
     
-    dataset_test = open_tfrecords(["./data/tfrecords/Autoencoder_Data_Test/data1.tfrecord",
-        "./data/tfrecords/Autoencoder_Data_Test/data2.tfrecord"])
+    dataset_test = open_tfrecords(["./data/tfrecords/Classifier_Data_Test/data1.tfrecord"])
 
     print("Training...")
 
@@ -70,61 +73,59 @@ def train_autoencoder():
         saved = False
         for sample in tqdm(dataset):
             if batch_sample == 0 and saved == True:
-                curr_batch_x = sample[1].numpy().reshape((1, 128, 128, SLICES))
-                curr_batch_y = sample[1].numpy().reshape((1, 128, 128, SLICES))
+                curr_batch_x = sample[1].numpy().reshape((1, SLICES, 128, 128, 1))
+                curr_batch_y = sample[1].numpy().reshape((1, SLICES, 128, 128, 1))
                 batch_sample += 1
             elif batch_sample % BATCH_SIZE == 0 and saved == True:
-                loss_value, grads = compute_autoencoder_gradients(model, curr_batch_x, curr_batch_y)
+                loss_value, grads = compute_simple_classifier_gradients(model, curr_batch_x, curr_batch_y)
                 epoch_loss_avg.update_state(loss_value)
                 optimizer.apply_gradients(zip(grads, model.trainable_variables))
                 print("Train loss: " + str(loss_value))
                 batch_sample = 0
             elif saved == True:
-                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, 128, 128, SLICES))))
-                curr_batch_y = np.concatenate((curr_batch_y, sample[1].numpy().reshape((1, 128, 128, SLICES))))
+                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, SLICES, 128, 128, 1))))
+                curr_batch_y = np.concatenate((curr_batch_y, sample[1].numpy().reshape((1, SLICES, 128, 128, 1))))
                 batch_sample += 1
             if saved == False:
-                save_image_input = sample[1].numpy().reshape((128, 128, SLICES))
-                plot3d(sample[1].numpy().reshape((128, 128, SLICES)), "3d/input.nii.gz")
-                save_image(sample[1].numpy().reshape((128, 128, SLICES))[:, :, 10], "images/input.jpg")
+                save_image_input = sample[1].numpy().reshape((SLICES, 128, 128, 1))
+                plot3d(sample[1].numpy().reshape((SLICES, 128, 128)), "3d/input.nii.gz")
                 saved = True
         
         batch_sample = 0
         for sample in tqdm(dataset_test):
             if batch_sample == 0:
-                curr_batch_x = sample[1].numpy().reshape((1, 128, 128, SLICES))
-                curr_batch_y = sample[1].numpy().reshape((1, 128, 128, SLICES))
+                curr_batch_x = sample[1].numpy().reshape((1, SLICES, 128, 128, 1))
+                curr_batch_y = sample[1].numpy().reshape((1, SLICES, 128, 128, 1))
                 batch_sample += 1
             else:
-                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, 128, 128, SLICES))))
-                curr_batch_y = np.concatenate((curr_batch_y, sample[1].numpy().reshape((1, 128, 128, SLICES))))
+                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, SLICES, 128, 128, 1))))
+                curr_batch_y = np.concatenate((curr_batch_y, sample[1].numpy().reshape((1, SLICES, 128, 128, 1))))
         test_loss_value, grads = compute_autoencoder_gradients(model, curr_batch_x, curr_batch_y)
 
         print("Test loss: " + str(test_loss_value))
 
         print("Epoch: " + str(epoch))
         if epoch % 5 == 0:
-            plot3d(np.array(model.predict(save_image_input.reshape((1, 128, 128, SLICES)))).reshape((128, 128, SLICES)), "3d/output" + str(epoch) + ".nii.gz")
-            save_image(np.array(model.predict(save_image_input.reshape((1, 128, 128, SLICES)))).reshape((128, 128, SLICES))[:, :, 10], "images/" + str(epoch) + ".jpg")
+            plot3d(np.array(model.predict(save_image_input.reshape((1, SLICES, 128, 128, 1)))).reshape((SLICES, 128, 128)), "3d/output" + str(epoch) + ".nii.gz")
             
-            layer_names = []
+            '''layer_names = []
             for layer in model.layers:
                 layer_names.append(layer.name)
             
             layer_outputs = [layer.output for layer in model.layers] 
             activation_model = tf.keras.Model(inputs=model.input, outputs=layer_outputs)
-            activations = activation_model.predict(save_image_input.reshape((1, 128, 128, SLICES)))
+            activations = activation_model.predict(save_image_input.reshape((1, SLICES, 128, 128, 1)))
     
             images_per_row = 8
             
             for layer_name, layer_activation in zip(layer_names, activations):
                 n_features = layer_activation.shape[-1]
-                size = layer_activation.shape[1]
+                size = layer_activation.shape[]
                 n_cols = n_features // images_per_row
                 display_grid = np.zeros((size * n_cols, images_per_row * size))
                 for col in range(n_cols):
                     for row in range(images_per_row):
-                        channel_image = layer_activation[0, :, :, col * images_per_row + row]
+                        channel_image = layer_activation[0, col * images_per_row + row, :, :]
                         display_grid[col * size : (col + 1) * size, row * size : (row + 1) * size] = channel_image
                 plt.figure(figsize=(32, 32))
                 plt.title(layer_name)
@@ -133,7 +134,7 @@ def train_autoencoder():
                 plt.savefig("activations/" + layer_name + ".jpg", cmap='viridis')
                 plt.close()
             
-            model.save('saved_model/my_model')
+            model.save('saved_model/my_model')'''
             print("Saved")
 
         train_loss_results.append(epoch_loss_avg.result())
@@ -147,7 +148,7 @@ def train_autoencoder():
 
 def train_simple_classifier():
     print("Creating model...")
-    model = create_simple_classifier()
+    model = create_simple_classifier([SLICES, 128, 128, 1], [8, 16], [3, 3], [1, 1], ["same", "same"], [2, 2])
 
     model.summary()
 
@@ -158,14 +159,9 @@ def train_simple_classifier():
     dataset = open_tfrecords(["./data/tfrecords/Classifier_Data_Train/data1.tfrecord",
         "./data/tfrecords/Classifier_Data_Train/data2.tfrecord",
         "./data/tfrecords/Classifier_Data_Train/data3.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data4.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data5.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data6.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data7.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data8.tfrecord"])
+        "./data/tfrecords/Classifier_Data_Train/data3.tfrecord"])
     
-    dataset_test = open_tfrecords(["./data/tfrecords/Classifier_Data_Test/data1.tfrecord",
-        "./data/tfrecords/Classifier_Data_Test/data2.tfrecord"])
+    dataset_test = open_tfrecords(["./data/tfrecords/Classifier_Data_Test/data1.tfrecord"])
 
     print("Training...")
 
@@ -187,34 +183,49 @@ def train_simple_classifier():
         saved = False
         for sample in tqdm(dataset):
             if batch_sample == 0:
-                curr_batch_x = sample[1].numpy().reshape((1, 128, 128, SLICES))
+                curr_batch_x = sample[1].numpy().reshape((1, SLICES, 128, 128, 1))
                 curr_batch_y = sample[0].numpy().reshape((1, 1))
                 batch_sample += 1
             elif batch_sample % BATCH_SIZE == 0:
-                loss_value, grads = compute_simple_classifier_gradients(model, curr_batch_x, curr_batch_y)
+                print(curr_batch_y)
+                print(model.predict(curr_batch_x)[1])
+                loss_value, grads = compute_simple_classifier_gradients(model, curr_batch_x, curr_batch_y, 0.2, 0.4)
                 epoch_loss_avg.update_state(loss_value)
-                accuracy.update_state(curr_batch_y, model.predict(curr_batch_x))
+                accuracy.update_state(curr_batch_y, model.predict(curr_batch_x)[1])
                 optimizer.apply_gradients(zip(grads, model.trainable_variables))
                 print("Accuracy: " + str(accuracy.result().numpy()))
                 batch_sample = 0
             else:
-                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, 128, 128, SLICES))))
+                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, SLICES, 128, 128, 1))))
                 curr_batch_y = np.concatenate((curr_batch_y, sample[0].numpy().reshape((1, 1))))
                 batch_sample += 1
+            if saved == False:
+                save_image_input = sample[1].numpy().reshape((SLICES, 128, 128, 1))
+                plot3d(sample[1].numpy().reshape((SLICES, 128, 128)), "3d/input.nii.gz")
+                saved = True
         
         batch_sample = 0
-        for sample in tqdm(dataset_test):
+        for sample in dataset_test:
             if batch_sample == 0:
-                curr_batch_x = sample[1].numpy().reshape((1, 128, 128, SLICES))
+                curr_batch_x = sample[1].numpy().reshape((1, SLICES, 128, 128, 1))
                 curr_batch_y = sample[0].numpy().reshape((1, 1))
                 batch_sample += 1
             else:
-                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, 128, 128, SLICES))))
+                curr_batch_x = np.concatenate((curr_batch_x, sample[1].numpy().reshape((1, SLICES, 128, 128, 1))))
                 curr_batch_y = np.concatenate((curr_batch_y, sample[0].numpy().reshape((1, 1))))
-        print(model.predict(curr_batch_x[:5]))
-        print(curr_batch_y[:5])
-        test_loss_value, grads = compute_simple_classifier_gradients(model, curr_batch_x, curr_batch_y)
-        test_accuracy.update_state(curr_batch_y, model.predict(curr_batch_x))
+                batch_sample += 1
+            if batch_sample == 10:
+                print(curr_batch_y)
+                print(model.predict(curr_batch_x)[1])
+                test_loss_value, grads = compute_simple_classifier_gradients(model, curr_batch_x, curr_batch_y, 0.2, 0.4)
+                test_accuracy.update_state(curr_batch_y, model.predict(curr_batch_x)[1])
+                batch_sample = 0
+        
+        if epoch % 5 == 0:
+            plot3d(np.array(model.predict(save_image_input.reshape((1, SLICES, 128, 128, 1)))[0]).reshape((SLICES, 128, 128)), "3d/output" + str(epoch) + ".nii.gz")
+
+            model.save('saved_model/my_model')
+            print("Saved")
         
         print("Train accuracy: " + str(accuracy.result().numpy()))
         print("Test accuracy: " + str(test_accuracy.result().numpy()))
@@ -235,36 +246,35 @@ def train_simple_classifier():
 
 def train_simple_comparison_model():
     print("Creating model...")
-    input_num = 1
-    model = create_simple_comparison_model(input_num)
+    model = create_av45_fdg_comparison_model([SLICES, 128, 128, 1], [4, 4], [3, 3], [1, 1], ["same", "same"], [2, 2])
     
     model.summary()
 
     dataset_reference = open_tfrecords(["./data/tfrecords/Reference/data1.tfrecord"])
 
-    ad_reference = []
+    ad_reference_av45 = []
+    ad_reference_fdg = []
+    cn_reference_av45 = []
+    cn_reference_fdg = []
 
     ref_i = 0
     for sample in dataset_reference:
-        if ref_i >= input_num:
-            ad_reference = sample[1].numpy().reshape((1, 128, 128, SLICES))
-            break
+        if ref_i == 0:
+            cn_reference_av45 = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))
+            cn_reference_fdg = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))
+        elif ref_i == 1:
+            ad_reference_av45 = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))
+            ad_reference_fdg = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))
         ref_i += 1
 
     print("Creating training objects...")
     optimizer = get_optimizer()
     
-    dataset = open_tfrecords(["./data/tfrecords/Classifier_Data_Train/data1.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data2.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data3.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data4.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data5.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data6.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data7.tfrecord",
-        "./data/tfrecords/Classifier_Data_Train/data8.tfrecord"])
+    dataset = open_tfrecords(["./data/tfrecords/Comparison_Data_Train/data1.tfrecord",
+        "./data/tfrecords/Comparison_Data_Train/data2.tfrecord",
+        "./data/tfrecords/Comparison_Data_Train/data3.tfrecord"])
     
-    dataset_test = open_tfrecords(["./data/tfrecords/Classifier_Data_Test/data1.tfrecord",
-        "./data/tfrecords/Classifier_Data_Test/data2.tfrecord"])
+    dataset_test = open_tfrecords(["./data/tfrecords/Comparison_Data_Test/data1.tfrecord"])
 
     print("Training...")
 
@@ -275,67 +285,133 @@ def train_simple_comparison_model():
     test_data_y = None
 
     train_loss_results = []
+    test_loss_results = []
+
+    train_accuracy_results = []
+    test_accuracy_results = []
 
     accuracy = tf.keras.metrics.BinaryAccuracy()
     test_accuracy = tf.keras.metrics.BinaryAccuracy()
 
     for epoch in range(EPOCHS):
         epoch_loss_avg = tf.keras.metrics.Mean()
+        test_loss_avg = tf.keras.metrics.Mean()
         batch_sample = 0
         save_image_input = None
         saved = False
+        ad_data_av45 = np.array([])
+        ad_data_fdg = np.array([])
+        cn_data_av45 = np.array([])
+        cn_data_fdg = np.array([])
         for sample in tqdm(dataset):
             if batch_sample == 0:
-                curr_batch_x = [[ad_reference, sample[1].numpy().reshape((1, 128, 128, SLICES))]]
+                curr_batch_x_av45 = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))
+                curr_batch_x_fdg = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))
+                cn_data_av45 = cn_reference_av45
+                cn_data_fdg = cn_reference_fdg
+                ad_data_av45 = ad_reference_av45
+                ad_data_fdg = ad_reference_fdg
                 curr_batch_y = sample[0].numpy().reshape((1, 1))
                 batch_sample += 1
             elif batch_sample % BATCH_SIZE == 0:
-                test_model = tf.keras.Model(inputs=model.input, outputs=model.layers[7].output)
-                print(test_model.predict(curr_batch_x))
                 print(curr_batch_y)
-                loss_value, grads = compute_simple_comparison_gradients(model, curr_batch_x, curr_batch_y)
+                print(model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
+                loss_value, grads = compute_simple_comparison_gradients(model, (ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg), curr_batch_y, 0.4, 0.7)
                 epoch_loss_avg.update_state(loss_value)
-                accuracy.update_state(curr_batch_y, model.predict(curr_batch_x))
+                accuracy.update_state(curr_batch_y, model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
                 optimizer.apply_gradients(zip(grads, model.trainable_variables))
                 print("Accuracy: " + str(accuracy.result().numpy()))
                 batch_sample = 0
             else:
-                curr_batch_x += [[ad_reference, sample[1].numpy().reshape((1, 128, 128, SLICES))]]
+                curr_batch_x_av45 = np.concatenate((curr_batch_x_av45, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))))
+                curr_batch_x_fdg = np.concatenate((curr_batch_x_fdg, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))))
+                ad_data_av45 = np.concatenate((ad_data_av45, (ad_reference_av45)))
+                ad_data_fdg = np.concatenate((ad_data_fdg, (ad_reference_fdg)))
+                cn_data_av45 = np.concatenate((cn_data_av45, (cn_reference_av45)))
+                cn_data_fdg = np.concatenate((cn_data_fdg, (cn_reference_fdg)))
                 curr_batch_y = np.concatenate((curr_batch_y, sample[0].numpy().reshape((1, 1))))
                 batch_sample += 1
+            if saved == False:
+                save_image_input = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))
+                plot3d(sample[1].numpy().reshape((2, SLICES, 128, 128))[0], "3d/input.nii.gz")
+                saved = True
         
         batch_sample = 0
+        ad_data_av45 = np.array([])
+        ad_data_fdg = np.array([])
+        cn_data_av45 = np.array([])
+        cn_data_fdg = np.array([])
         for sample in tqdm(dataset_test):
             if batch_sample == 0:
-                curr_batch_x = [[ad_reference, sample[1].numpy().reshape((1, 128, 128, SLICES))]]
+                curr_batch_x_av45 = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))
+                curr_batch_x_fdg = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))
+                cn_data_av45 = cn_reference_av45
+                cn_data_fdg = cn_reference_fdg
+                ad_data_av45 = ad_reference_av45
+                ad_data_fdg = ad_reference_fdg
                 curr_batch_y = sample[0].numpy().reshape((1, 1))
                 batch_sample += 1
             else:
-                curr_batch_x += [[ad_reference, sample[1].numpy().reshape((1, 128, 128, SLICES))]]
+                curr_batch_x_av45 = np.concatenate((curr_batch_x_av45, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))))
+                curr_batch_x_fdg = np.concatenate((curr_batch_x_fdg, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))))
+                ad_data_av45 = np.concatenate((ad_data_av45, (ad_reference_av45)))
+                ad_data_fdg = np.concatenate((ad_data_fdg, (ad_reference_fdg)))
+                cn_data_av45 = np.concatenate((cn_data_av45, (cn_reference_av45)))
+                cn_data_fdg = np.concatenate((cn_data_fdg, (cn_reference_fdg)))
                 curr_batch_y = np.concatenate((curr_batch_y, sample[0].numpy().reshape((1, 1))))
-        test_loss_value, grads = compute_simple_comparison_gradients(model, curr_batch_x, curr_batch_y)
-        test_accuracy.update_state(curr_batch_y, model.predict(curr_batch_x))
+                batch_sample += 1
+            if batch_sample == 4:
+                print(curr_batch_y)
+                print(model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
+                test_loss_value, grads = compute_simple_comparison_gradients(model, (ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg), curr_batch_y, 0.4, 0.7)
+                test_loss_avg.update_state(test_loss_value)
+                test_accuracy.update_state(curr_batch_y, model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
+                batch_sample = 0
         
+        if epoch % 5 == 0:
+            plot3d(np.array(model.predict((ad_data_av45[0].reshape((1, SLICES, 128, 128, 1)), \
+                ad_data_fdg[0].reshape((1, SLICES, 128, 128, 1)), \
+                save_image_input.reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1)), \
+                save_image_input.reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1)), \
+                cn_data_av45[0].reshape((1, SLICES, 128, 128, 1)), \
+                ad_data_fdg[0].reshape((1, SLICES, 128, 128, 1))))[0]).reshape((SLICES, 128, 128)), "3d/output" + str(epoch) + ".nii.gz")
+
+            model.save('saved_model/my_model')
+            print("Saved")
+
         print("Train accuracy: " + str(accuracy.result().numpy()))
         print("Test accuracy: " + str(test_accuracy.result().numpy()))
 
+        train_loss_results.append(epoch_loss_avg.result())
+        test_loss_results.append(test_loss_avg.result())
+
+        train_accuracy_results.append(accuracy.result())
+        test_accuracy_results.append(test_accuracy.result())
+
         accuracy.reset_states()
         test_accuracy.reset_states()
-
-        train_loss_results.append(epoch_loss_avg.result())
 
         print("Epoch: " + str(epoch))
     
     fig, axes = plt.subplots(1, sharex=True, figsize=(12, 8))
     axes.set_ylabel("Loss", fontsize=14)
     axes.plot(train_loss_results)
+    axes.plot(test_loss_results)
     axes.set_xlabel("Epoch", fontsize=14)
     plt.savefig("loss.png")
 
+    fig, axes = plt.subplots(1, sharex=True, figsize=(12, 8))
+    axes.set_ylabel("Accuracy", fontsize=14)
+    axes.plot(train_accuracy_results)
+    axes.plot(test_accuracy_results)
+    axes.set_xlabel("Epoch", fontsize=14)
+    plt.savefig("accuracy.png")
+
 
 def main():
-    train_simple_classifier()
-    #train_simple_comparison_model()
+    #train_simple_classifier()
+    train_simple_comparison_model()
+    #train_autoencoder()
 
     
 main()
