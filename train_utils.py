@@ -6,6 +6,24 @@ import numpy as np
 from tqdm import tqdm
 import random
 import cv2
+import nibabel as nib
+
+
+def plot3d(data, filePath):
+    data = data[0].reshape((96, 128, 128))
+    final_arr = np.array([])
+    count = 0
+    for i in data:
+        if count == 0:
+            final_arr = i.reshape((128, 128, 1))
+        else:
+            final_arr = np.concatenate((final_arr, i.reshape(128, 128, 1)), axis=2)
+        count += 1
+
+    print(final_arr.shape)
+
+    img = nib.Nifti1Image(final_arr, np.eye(4))
+    nib.save(img, filePath)
 
 
 def normalize(input_slice):
@@ -60,7 +78,7 @@ def get_simple_comparison_loss_object():
 
 def autoencoder_loss(model, x, y, training):
     y_ = model(x, training=training)
-    return get_autoencoder_loss_object()(y_true=y, y_pred=y_)
+    return get_autoencoder_loss_object()(y_true=x, y_pred=y_)
 
 
 def simple_comparison_loss(model, x, y, training, autoencoder_scale, classifier_scale):

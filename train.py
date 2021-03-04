@@ -15,8 +15,8 @@ import nibabel as nib
 EXAMPLES = 525
 STARTING_INDEX = 0
 SLICES = 96
-BATCH_SIZE = 4
-EPOCHS = 100
+BATCH_SIZE = 2
+EPOCHS = 30
 
 
 def save_image(data, filePath):
@@ -246,7 +246,7 @@ def train_simple_classifier():
 
 def train_simple_comparison_model():
     print("Creating model...")
-    model = create_av45_fdg_comparison_model([SLICES, 128, 128, 1], [4, 4], [3, 3], [1, 1], ["same", "same"], [2, 2])
+    model = create_av45_fdg_comparison_model([SLICES, 128, 128, 1], [4, 8], [3, 3], ["same", "same"], [2, 2])
     
     model.summary()
 
@@ -270,6 +270,8 @@ def train_simple_comparison_model():
     print("Creating training objects...")
     optimizer = get_optimizer()
     
+    #dataset = open_tfrecords(["./data/tfrecords/Comparison_Data_Train/data1.tfrecord"])
+
     dataset = open_tfrecords(["./data/tfrecords/Comparison_Data_Train/data1.tfrecord",
         "./data/tfrecords/Comparison_Data_Train/data2.tfrecord",
         "./data/tfrecords/Comparison_Data_Train/data3.tfrecord"])
@@ -293,9 +295,10 @@ def train_simple_comparison_model():
     accuracy = tf.keras.metrics.BinaryAccuracy()
     test_accuracy = tf.keras.metrics.BinaryAccuracy()
 
+    epoch_loss_avg = tf.keras.metrics.Mean()
+    test_loss_avg = tf.keras.metrics.Mean()
+
     for epoch in range(EPOCHS):
-        epoch_loss_avg = tf.keras.metrics.Mean()
-        test_loss_avg = tf.keras.metrics.Mean()
         batch_sample = 0
         save_image_input = None
         saved = False
@@ -316,7 +319,7 @@ def train_simple_comparison_model():
             elif batch_sample % BATCH_SIZE == 0:
                 print(curr_batch_y)
                 print(model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
-                loss_value, grads = compute_simple_comparison_gradients(model, (ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg), curr_batch_y, 0.4, 0.7)
+                loss_value, grads = compute_simple_comparison_gradients(model, [ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg], curr_batch_y, 0.3, 0.7)
                 epoch_loss_avg.update_state(loss_value)
                 accuracy.update_state(curr_batch_y, model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
                 optimizer.apply_gradients(zip(grads, model.trainable_variables))
@@ -333,7 +336,7 @@ def train_simple_comparison_model():
                 batch_sample += 1
             if saved == False:
                 save_image_input = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))
-                plot3d(sample[1].numpy().reshape((2, SLICES, 128, 128))[0], "3d/input.nii.gz")
+                plot3d(cn_data_av45[0], "3d/input.nii.gz")
                 saved = True
         
         batch_sample = 0
@@ -341,7 +344,16 @@ def train_simple_comparison_model():
         ad_data_fdg = np.array([])
         cn_data_av45 = np.array([])
         cn_data_fdg = np.array([])
+        correct_having = 0
+        correct_not_having = 0
         for sample in tqdm(dataset_test):
+            curr_output = model.predict((ad_reference_av45, ad_reference_fdg, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1)), sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1)), cn_reference_av45, cn_reference_fdg))[6][0][0]
+            #Calculating sensitivity
+            if curr_output > 0.5 and sample[0].numpy().reshape((1, 1))[0] == 1:
+                correct_having += 1
+            #Calculating specificity
+            elif curr_output < 0.5 and sample[0].numpy().reshape((1, 1))[0] == 0:
+                correct_not_having += 1
             if batch_sample == 0:
                 curr_batch_x_av45 = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))
                 curr_batch_x_fdg = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))
@@ -360,27 +372,29 @@ def train_simple_comparison_model():
                 cn_data_fdg = np.concatenate((cn_data_fdg, (cn_reference_fdg)))
                 curr_batch_y = np.concatenate((curr_batch_y, sample[0].numpy().reshape((1, 1))))
                 batch_sample += 1
-            if batch_sample == 4:
+            if batch_sample == BATCH_SIZE:
                 print(curr_batch_y)
                 print(model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
-                test_loss_value, grads = compute_simple_comparison_gradients(model, (ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg), curr_batch_y, 0.4, 0.7)
+                test_loss_value, grads = compute_simple_comparison_gradients(model, (ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg), curr_batch_y, 0.3, 0.7)
                 test_loss_avg.update_state(test_loss_value)
                 test_accuracy.update_state(curr_batch_y, model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
                 batch_sample = 0
         
-        if epoch % 5 == 0:
+        if epoch % 2 == 0:
             plot3d(np.array(model.predict((ad_data_av45[0].reshape((1, SLICES, 128, 128, 1)), \
                 ad_data_fdg[0].reshape((1, SLICES, 128, 128, 1)), \
                 save_image_input.reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1)), \
                 save_image_input.reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1)), \
                 cn_data_av45[0].reshape((1, SLICES, 128, 128, 1)), \
-                ad_data_fdg[0].reshape((1, SLICES, 128, 128, 1))))[0]).reshape((SLICES, 128, 128)), "3d/output" + str(epoch) + ".nii.gz")
+                cn_data_fdg[0].reshape((1, SLICES, 128, 128, 1))))[0]).reshape((SLICES, 128, 128)), "3d/output" + str(epoch) + ".nii.gz")
 
             model.save('saved_model/my_model')
             print("Saved")
 
         print("Train accuracy: " + str(accuracy.result().numpy()))
         print("Test accuracy: " + str(test_accuracy.result().numpy()))
+        print("Sensitivity: " + str(correct_having/11))
+        print("Specificity: " + str(correct_not_having/11))
 
         train_loss_results.append(epoch_loss_avg.result())
         test_loss_results.append(test_loss_avg.result())
@@ -390,6 +404,9 @@ def train_simple_comparison_model():
 
         accuracy.reset_states()
         test_accuracy.reset_states()
+
+        epoch_loss_avg.reset_states()
+        test_loss_avg.reset_states()
 
         print("Epoch: " + str(epoch))
     
