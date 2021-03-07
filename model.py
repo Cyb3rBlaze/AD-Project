@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow.keras.backend as K
 from keras.utils.generic_utils import get_custom_objects
 
-l2 = tf.keras.regularizers.L2(0.2)
+l2 = tf.keras.regularizers.L2(0.1)
 
 
 def down_sample(input_layer, num_filters, kernel_size, padding, max_pool):
@@ -119,20 +119,9 @@ def create_simple_comparison_model(input_dims, num_filters, kernel_size, strides
 
 
 def create_av45_fdg_comparison_model(input_dims, num_filters, kernel_size, padding, max_pool):
-    ad_input_av45 = tf.keras.layers.Input(shape=(96, 128, 128, 1))
     unknown_input_av45 = tf.keras.Input(shape=(96, 128, 128, 1))
-    cn_input_av45 = tf.keras.Input(shape=(96, 128, 128, 1))
 
-    ad_input_fdg = tf.keras.layers.Input(shape=(96, 128, 128, 1))
     unknown_input_fdg = tf.keras.Input(shape=(96, 128, 128, 1))
-    cn_input_fdg = tf.keras.Input(shape=(96, 128, 128, 1))
-
-    #AD
-    encoder_ad_av45 = create_encoder(ad_input_av45, num_filters, kernel_size, padding, max_pool)
-    decoder_ad_av45 = create_decoder(encoder_ad_av45, num_filters, kernel_size, padding, max_pool)
-
-    encoder_ad_fdg = create_encoder(ad_input_fdg, num_filters, kernel_size, padding, max_pool)
-    decoder_ad_fdg = create_decoder(encoder_ad_fdg, num_filters, kernel_size, padding, max_pool)
 
     #Unknown
     encoder_unknown_av45 = create_encoder(unknown_input_av45, num_filters, kernel_size, padding, max_pool)
@@ -141,30 +130,12 @@ def create_av45_fdg_comparison_model(input_dims, num_filters, kernel_size, paddi
     encoder_unknown_fdg = create_encoder(unknown_input_fdg, num_filters, kernel_size, padding, max_pool)
     decoder_unknown_fdg = create_decoder(encoder_unknown_fdg, num_filters, kernel_size, padding, max_pool)
 
-    #CN
-    encoder_cn_av45 = create_encoder(cn_input_av45, num_filters, kernel_size, padding, max_pool)
-    decoder_cn_av45 = create_decoder(encoder_cn_av45, num_filters, kernel_size, padding, max_pool)
+    flatten_av45 = tf.keras.layers.Flatten(activity_regularizer=l2)(encoder_unknown_av45)
 
-    encoder_cn_fdg = create_encoder(cn_input_fdg, num_filters, kernel_size, padding, max_pool)
-    decoder_cn_fdg = create_decoder(encoder_cn_fdg, num_filters, kernel_size, padding, max_pool)
-    
-    #Euclidian distance
-    ad_unknown_av45 = tf.keras.layers.Lambda(euclidean_distance)([encoder_ad_av45, encoder_unknown_av45])
-    cn_unknown_av45 = tf.keras.layers.Lambda(euclidean_distance)([encoder_cn_av45, encoder_unknown_av45])
-
-    ad_unknown_fdg = tf.keras.layers.Lambda(euclidean_distance)([encoder_ad_fdg, encoder_unknown_fdg])
-    cn_unknown_fdg = tf.keras.layers.Lambda(euclidean_distance)([encoder_cn_fdg, encoder_unknown_fdg])
-    
-    final_difference_av45 = tf.keras.layers.Lambda(subtract)([ad_unknown_av45, cn_unknown_av45])
-
-    flatten_av45 = tf.keras.layers.Flatten(activity_regularizer=l2)(final_difference_av45)
-
-    final_difference_fdg = tf.keras.layers.Lambda(subtract)([ad_unknown_fdg, cn_unknown_fdg])
-
-    flatten_fdg = tf.keras.layers.Flatten(activity_regularizer=l2)(final_difference_fdg)
+    flatten_fdg = tf.keras.layers.Flatten(activity_regularizer=l2)(encoder_unknown_fdg)
 
     concacted = tf.keras.layers.concatenate([flatten_av45, flatten_fdg])
 
     final_activation = tf.keras.layers.Dense(1, activation="sigmoid")(concacted)
 
-    return tf.keras.Model(inputs=[ad_input_av45, ad_input_fdg, unknown_input_av45, unknown_input_fdg, cn_input_av45, cn_input_fdg], outputs=[decoder_ad_av45, decoder_ad_fdg, decoder_unknown_av45, decoder_unknown_fdg, decoder_cn_av45, decoder_cn_fdg, final_activation])
+    return tf.keras.Model(inputs=[unknown_input_av45, unknown_input_fdg], outputs=[decoder_unknown_av45, decoder_unknown_fdg, final_activation])

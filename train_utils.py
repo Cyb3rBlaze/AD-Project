@@ -83,15 +83,11 @@ def autoencoder_loss(model, x, y, training):
 
 def simple_comparison_loss(model, x, y, training, autoencoder_scale, classifier_scale):
     y_ = model(x, training=training)
-    loss_ad_av45 = get_autoencoder_loss_object()(y_true=x[0], y_pred=y_[0])
-    loss_ad_fdg = get_autoencoder_loss_object()(y_true=x[1], y_pred=y_[1])
-    loss_unknown_av45 = get_autoencoder_loss_object()(y_true=x[2], y_pred=y_[2])
-    loss_unknown_fdg = get_autoencoder_loss_object()(y_true=x[3], y_pred=y_[3])
-    loss_cn_av45 = get_autoencoder_loss_object()(y_true=x[4], y_pred=y_[4])
-    loss_cn_fdg = get_autoencoder_loss_object()(y_true=x[5], y_pred=y_[5])
-    loss_classifier = get_simple_comparison_loss_object()(y_true=y, y_pred=y_[6])
+    loss_unknown_av45 = get_autoencoder_loss_object()(y_true=x[0], y_pred=y_[0])
+    loss_unknown_fdg = get_autoencoder_loss_object()(y_true=x[1], y_pred=y_[1])
+    loss_classifier = get_simple_comparison_loss_object()(y_true=y, y_pred=y_[2])
     
-    return loss_ad_av45*autoencoder_scale + loss_ad_fdg*autoencoder_scale + loss_unknown_av45*autoencoder_scale + loss_unknown_fdg*autoencoder_scale + loss_cn_av45*autoencoder_scale + loss_cn_fdg*autoencoder_scale + loss_classifier*classifier_scale
+    return loss_unknown_av45*autoencoder_scale + loss_unknown_fdg*autoencoder_scale + loss_classifier*classifier_scale
 
 
 def simple_classifier_loss(model, x, y, training, autoencoder_scaling, classifier_scaling):

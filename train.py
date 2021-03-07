@@ -310,33 +310,25 @@ def train_simple_comparison_model():
             if batch_sample == 0:
                 curr_batch_x_av45 = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))
                 curr_batch_x_fdg = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))
-                cn_data_av45 = cn_reference_av45
-                cn_data_fdg = cn_reference_fdg
-                ad_data_av45 = ad_reference_av45
-                ad_data_fdg = ad_reference_fdg
                 curr_batch_y = sample[0].numpy().reshape((1, 1))
                 batch_sample += 1
             elif batch_sample % BATCH_SIZE == 0:
                 print(curr_batch_y)
-                print(model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
-                loss_value, grads = compute_simple_comparison_gradients(model, [ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg], curr_batch_y, 0.3, 0.7)
+                print(model.predict((curr_batch_x_av45, curr_batch_x_fdg))[2])
+                loss_value, grads = compute_simple_comparison_gradients(model, [curr_batch_x_av45, curr_batch_x_fdg], curr_batch_y, 0.3, 0.7)
                 epoch_loss_avg.update_state(loss_value)
-                accuracy.update_state(curr_batch_y, model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
+                accuracy.update_state(curr_batch_y, model.predict((curr_batch_x_av45, curr_batch_x_fdg))[2])
                 optimizer.apply_gradients(zip(grads, model.trainable_variables))
                 print("Accuracy: " + str(accuracy.result().numpy()))
                 batch_sample = 0
             else:
                 curr_batch_x_av45 = np.concatenate((curr_batch_x_av45, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))))
                 curr_batch_x_fdg = np.concatenate((curr_batch_x_fdg, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))))
-                ad_data_av45 = np.concatenate((ad_data_av45, (ad_reference_av45)))
-                ad_data_fdg = np.concatenate((ad_data_fdg, (ad_reference_fdg)))
-                cn_data_av45 = np.concatenate((cn_data_av45, (cn_reference_av45)))
-                cn_data_fdg = np.concatenate((cn_data_fdg, (cn_reference_fdg)))
                 curr_batch_y = np.concatenate((curr_batch_y, sample[0].numpy().reshape((1, 1))))
                 batch_sample += 1
             if saved == False:
                 save_image_input = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))
-                plot3d(cn_data_av45[0], "3d/input.nii.gz")
+                plot3d(curr_batch_x_av45[0], "3d/input.nii.gz")
                 saved = True
         
         batch_sample = 0
@@ -347,7 +339,7 @@ def train_simple_comparison_model():
         correct_having = 0
         correct_not_having = 0
         for sample in tqdm(dataset_test):
-            curr_output = model.predict((ad_reference_av45, ad_reference_fdg, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1)), sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1)), cn_reference_av45, cn_reference_fdg))[6][0][0]
+            curr_output = model.predict((sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1)), sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))))[2][0][0]
             #Calculating sensitivity
             if curr_output > 0.5 and sample[0].numpy().reshape((1, 1))[0] == 1:
                 correct_having += 1
@@ -357,36 +349,24 @@ def train_simple_comparison_model():
             if batch_sample == 0:
                 curr_batch_x_av45 = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))
                 curr_batch_x_fdg = sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))
-                cn_data_av45 = cn_reference_av45
-                cn_data_fdg = cn_reference_fdg
-                ad_data_av45 = ad_reference_av45
-                ad_data_fdg = ad_reference_fdg
                 curr_batch_y = sample[0].numpy().reshape((1, 1))
                 batch_sample += 1
             else:
                 curr_batch_x_av45 = np.concatenate((curr_batch_x_av45, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1))))
                 curr_batch_x_fdg = np.concatenate((curr_batch_x_fdg, sample[1].numpy().reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))))
-                ad_data_av45 = np.concatenate((ad_data_av45, (ad_reference_av45)))
-                ad_data_fdg = np.concatenate((ad_data_fdg, (ad_reference_fdg)))
-                cn_data_av45 = np.concatenate((cn_data_av45, (cn_reference_av45)))
-                cn_data_fdg = np.concatenate((cn_data_fdg, (cn_reference_fdg)))
                 curr_batch_y = np.concatenate((curr_batch_y, sample[0].numpy().reshape((1, 1))))
                 batch_sample += 1
             if batch_sample == BATCH_SIZE:
                 print(curr_batch_y)
-                print(model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
-                test_loss_value, grads = compute_simple_comparison_gradients(model, (ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg), curr_batch_y, 0.3, 0.7)
+                print(model.predict((curr_batch_x_av45, curr_batch_x_fdg))[2])
+                test_loss_value, grads = compute_simple_comparison_gradients(model, (curr_batch_x_av45, curr_batch_x_fdg), curr_batch_y, 0.3, 0.7)
                 test_loss_avg.update_state(test_loss_value)
-                test_accuracy.update_state(curr_batch_y, model.predict((ad_data_av45, ad_data_fdg, curr_batch_x_av45, curr_batch_x_fdg, cn_data_av45, cn_data_fdg))[6])
+                test_accuracy.update_state(curr_batch_y, model.predict((curr_batch_x_av45, curr_batch_x_fdg))[2])
                 batch_sample = 0
         
         if epoch % 2 == 0:
-            plot3d(np.array(model.predict((ad_data_av45[0].reshape((1, SLICES, 128, 128, 1)), \
-                ad_data_fdg[0].reshape((1, SLICES, 128, 128, 1)), \
-                save_image_input.reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1)), \
-                save_image_input.reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1)), \
-                cn_data_av45[0].reshape((1, SLICES, 128, 128, 1)), \
-                cn_data_fdg[0].reshape((1, SLICES, 128, 128, 1))))[0]).reshape((SLICES, 128, 128)), "3d/output" + str(epoch) + ".nii.gz")
+            plot3d(np.array(model.predict((save_image_input.reshape((2, SLICES, 128, 128, 1))[0].reshape((1, SLICES, 128, 128, 1)), \
+                save_image_input.reshape((2, SLICES, 128, 128, 1))[1].reshape((1, SLICES, 128, 128, 1))))[0]).reshape((SLICES, 128, 128)), "3d/output" + str(epoch) + ".nii.gz")
 
             model.save('saved_model/my_model')
             print("Saved")
